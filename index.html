@@ -6,11 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VoidStream — Ad-Free Twitch</title>
   <meta name="description" content="100% client-side, ad-free Twitch live stream player." />
-
-  <!-- HLS.js -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
-
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
@@ -32,7 +27,6 @@
       --accent2: #772ce8;
       --text: #efeff1;
       --muted: #8b8b9e;
-      --radius: 12px;
       --chat-w: 340px;
     }
 
@@ -72,7 +66,7 @@
       white-space: nowrap;
     }
 
-    .badge-adfree {
+    .badge {
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.5px;
@@ -136,11 +130,6 @@
       transform: scale(0.97);
     }
 
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
     /* ── Status bar ── */
     #status-bar {
       display: flex;
@@ -152,7 +141,6 @@
       border-bottom: 1px solid var(--border);
       min-height: 36px;
       color: var(--muted);
-      transition: color 0.3s;
     }
 
     #status-bar.ok {
@@ -161,10 +149,6 @@
 
     #status-bar.err {
       color: #f87171;
-    }
-
-    #status-bar.warn {
-      color: #fbbf24;
     }
 
     .live-dot {
@@ -206,57 +190,17 @@
     #player-wrap {
       flex: 1;
       min-width: 0;
-      display: flex;
-      flex-direction: column;
       background: #000;
       position: relative;
     }
 
-    video#player {
+    /* Twitch embed iframe fills the player area completely */
+    #twitch-embed {
       width: 100%;
       height: 100%;
+      border: none;
       display: block;
       background: #000;
-    }
-
-    /* Loading overlay */
-    #overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      background: rgba(0, 0, 0, .7);
-      pointer-events: none;
-      transition: opacity 0.4s;
-    }
-
-    #overlay.hidden {
-      opacity: 0;
-    }
-
-    .spinner {
-      width: 48px;
-      height: 48px;
-      border: 3px solid rgba(145, 71, 255, .25);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    #overlay-text {
-      font-size: 14px;
-      color: var(--muted);
-      text-align: center;
-      padding: 0 24px;
     }
 
     /* ── Chat ── */
@@ -334,7 +278,7 @@
         font-size: 1rem;
       }
 
-      .badge-adfree {
+      .badge {
         display: none;
       }
     }
@@ -356,336 +300,135 @@
 
 <body>
 
-  <!-- ═══════════════════════════════════
-     HEADER
-════════════════════════════════════ -->
+  <!-- ════════ HEADER ════════ -->
   <header>
     <div class="logo">VoidStream</div>
-    <div class="badge-adfree">Ad-Free</div>
+    <div class="badge">Ad-Free</div>
     <div class="channel-bar">
       <input id="channel-input" type="text" placeholder="Channel name…" autocomplete="off" spellcheck="false" />
       <button class="btn" id="load-btn">▶ Load</button>
     </div>
   </header>
 
-  <!-- ═══════════════════════════════════
-     STATUS BAR
-════════════════════════════════════ -->
+  <!-- ════════ STATUS BAR ════════ -->
   <div id="status-bar">
     <div class="live-dot"></div>
     <span id="status-text">Enter a channel name and press Load.</span>
   </div>
 
-  <!-- ═══════════════════════════════════
-     MAIN CONTENT
-════════════════════════════════════ -->
+  <!-- ════════ MAIN ════════ -->
   <div id="app">
+
+    <!-- Twitch embed player -->
     <div id="player-wrap">
-      <video id="player" controls autoplay muted playsinline></video>
-      <div id="overlay">
-        <div class="spinner"></div>
-        <div id="overlay-text">Loading stream…</div>
-      </div>
+      <!--
+      player.twitch.tv embed:
+      - Zero CORS issues (Twitch serves its own player)
+      - Low Latency mode enabled natively
+      - Ad-blocking works via TTV LOL PRO / Purple Adblock extensions
+        (they intercept network requests inside this iframe too)
+      - "parent" is dynamically set to the page's hostname
+    -->
+      <iframe id="twitch-embed" allowfullscreen allow="autoplay; fullscreen" title="Twitch Stream"></iframe>
     </div>
 
+    <!-- ChatIS chat -->
     <div id="chat-wrap">
       <div class="chat-header">
         💬 Live Chat <span>via ChatIS</span>
       </div>
       <iframe id="chat-iframe" title="Live Chat" allowfullscreen></iframe>
     </div>
+
   </div>
 
-  <!-- ═══════════════════════════════════
-     JAVASCRIPT
-════════════════════════════════════ -->
+  <!-- ════════ JS ════════ -->
   <script>
     'use strict';
 
     /* ─────────────────────────────────────────────────────────
-      HOW THIS WORKS
-      ─────────────────────────────────────────────────────────
-      1. We call Twitch's GraphQL API (public anon Client-ID)
-         to get a sig+token pair for the channel's stream.
-      2. We build a usher.ttvnw.net URL with those credentials.
-      3. HLS.js fetches the master playlist from Twitch's own CDN.
-         → No external proxy, zero added latency.
-    
-      The GQL Client-ID below ("kimne78kx3ncx6brgo4mv6wki5h1ko")
-      is the public anonymous Twitch web-player client ID.
-      It has been stable for many years and is used by all
-      major community ad-blocking projects (Purple Adblock, vaft, etc).
-    
-      NOTE: Twitch's SSAI (server-side ad injection) may still
-      insert ads into the CDN stream on some accounts/regions.
-      For guaranteed ad-free viewing the best approach is to
-      pair this page with the TTV LOL PRO or Purple Adblock
-      browser extension, which intercepts GQL calls.
+       CONFIG
+       Change DEFAULT_CHANNEL to whatever you want to auto-load.
      ────────────────────────────────────────────────────────── */
-
-    const GQL_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
     const DEFAULT_CHANNEL = 'shroud';
 
-    /* Build ChatIS URL for a channel */
-    const chatisURL = (ch) => `https://chatis.is2511.com/v2/?channel=${ch}&size=1&font=11&shadow=1`;
-
     /* ─────────────────────────────────────────────────────────
-       CORS proxy list — used ONLY for the initial usher master
-       playlist fetch. Video segments load directly from Twitch
-       CDN which already has Access-Control-Allow-Origin: *.
-       Free public proxies — first working one wins.
+       HOW THE PLAYER WORKS
+       ─────────────────────────────────────────────────────────
+       We use the official Twitch Embed Player iframe
+       (player.twitch.tv). This completely bypasses CORS — there
+       are no cross-origin XHR requests at all. The browser just
+       loads an iframe from Twitch's own domain.
+    
+       For ad-blocking: install TTV LOL PRO or Purple Adblock.
+       These extensions intercept requests *inside* the iframe
+       and strip ads at the token level — they work here exactly
+       as they do on the main Twitch site.
+    
+       The "parent" query param is Twitch's domain allowlist.
+       We set it dynamically to the page's own hostname.
+       • GitHub Pages  → justakrem.github.io  (set automatically)
+       • Local file    → we use "localhost" (Twitch allows this)
      ────────────────────────────────────────────────────────── */
-    const CORS_PROXIES = [
-      null,                                      // 1st: try direct (works if served from HTTPS)
-      'https://corsproxy.io/?url=',              // 2nd: corsproxy.io
-      'https://api.allorigins.win/raw?url=',     // 3rd: allorigins
-      'https://cors.eu.org/',                    // 4th: cors.eu.org
-      'https://thingproxy.freeboard.io/fetch/',  // 5th: thingproxy
-    ];
 
-    /** Fetch a URL trying each CORS proxy in order until one succeeds */
-    async function fetchWithCORS(url) {
-      for (const proxy of CORS_PROXIES) {
-        try {
-          const proxyUrl = proxy ? proxy + encodeURIComponent(url) : url;
-          const res = await fetch(proxyUrl);
-          if (res.ok) return res;
-        } catch (_) { /* try next */ }
-      }
-      throw new Error('Could not reach Twitch playlist (CORS issue). Try opening the page from a web server or GitHub Pages.');
-    }
+    /* Determine parent domain for Twitch embed allowlist */
+    const PARENT = window.location.hostname || 'localhost';
 
-    const usherURL = (channel, token, sig) => {
-      const p = Math.floor(Math.random() * 1e7);
+    /* Build Twitch embed URL */
+    const twitchEmbedURL = (ch) => {
       const params = new URLSearchParams({
-        sig,
-        token,
-        allow_source: 'true',
-        fast_bread: 'true',
-        p: String(p),
-        player_backend: 'mediaplayer',
-        playlist_include_framerate: 'true',
-        reassignments_supported: 'false',
-        supported_codecs: 'avc1',
-        cdm: 'wv',
-        transcode_mode: 'cbr_v1',
+        channel: ch,
+        parent: PARENT,
+        autoplay: 'true',
+        muted: 'true',
+        // Low Latency mode — Twitch enables it per-channel
+        // Nothing to set here; Twitch respects channel's LL setting
       });
-      return `https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channel)}.m3u8?${params}`;
+      return `https://player.twitch.tv/?${params}`;
     };
 
+    /* Build ChatIS v2 URL */
+    const chatisURL = (ch) =>
+      `https://chatis.is2511.com/v2/?channel=${ch}&size=1&font=11&shadow=1`;
+
     /* ── DOM refs ── */
-    const video = document.getElementById('player');
     const statusBar = document.getElementById('status-bar');
     const statusText = document.getElementById('status-text');
-    const overlay = document.getElementById('overlay');
-    const overlayText = document.getElementById('overlay-text');
+    const twitchEmbed = document.getElementById('twitch-embed');
     const chatIframe = document.getElementById('chat-iframe');
     const channelInput = document.getElementById('channel-input');
     const loadBtn = document.getElementById('load-btn');
 
-    /* ── Helpers ── */
+    /* ── UI helpers ── */
     function setStatus(msg, cls = '') {
       statusText.textContent = msg;
       statusBar.className = cls;
     }
-    function showOverlay(msg) {
-      overlayText.textContent = msg;
-      overlay.classList.remove('hidden');
-    }
-    function hideOverlay() {
-      overlay.classList.add('hidden');
-    }
 
-    /* ── HLS.js instance ── */
-    let hls = null;
-    function destroyHLS() {
-      if (hls) { hls.destroy(); hls = null; }
-    }
-
-    /* ─────────────────────────────────────────────────────────
-       Step 1 — Fetch playback token via Twitch GQL
-     ────────────────────────────────────────────────────────── */
-    async function fetchToken(channel) {
-      /*
-       * Two alternative GQL queries are tried in order:
-       *  A) PlaybackAccessToken (uses Client-Integrity header — optional)
-       *  B) PlaybackAccessToken_Template (plain, no integrity needed)
-       */
-      const body = JSON.stringify({
-        operationName: 'PlaybackAccessToken_Template',
-        query: `query PlaybackAccessToken_Template(
-      $login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!
-    ) {
-      streamPlaybackAccessToken(channelName: $login, params: {
-        platform: "web", playerBackend: "mediaplayer", playerType: $playerType
-      }) @include(if: $isLive) { value signature __typename }
-      videoPlaybackAccessToken(id: $vodID, params: {
-        platform: "web", playerBackend: "mediaplayer", playerType: $playerType
-      }) @include(if: $isVod) { value signature __typename }
-    }`,
-        variables: {
-          isLive: true,
-          login: channel.toLowerCase(),
-          isVod: false,
-          vodID: '',
-          playerType: 'site',
-        },
-      });
-
-      const res = await fetch('https://gql.twitch.tv/gql', {
-        method: 'POST',
-        headers: {
-          'Client-ID': GQL_CLIENT_ID,
-          'Content-Type': 'application/json',
-        },
-        body,
-      });
-
-      if (!res.ok) throw new Error(`GQL ${res.status}: ${res.statusText}`);
-
-      const json = await res.json();
-      const data = json?.data?.streamPlaybackAccessToken;
-      if (!data?.value || !data?.signature) {
-        throw new Error('Channel may be offline or Twitch returned no token.');
-      }
-      return { token: data.value, sig: data.signature };
-    }
-
-    /* ─────────────────────────────────────────────────────────
-       Step 2 — Load the HLS stream with HLS.js
-     ────────────────────────────────────────────────────────── */
-    function loadHLS(channel, m3u8url) {
-      destroyHLS();
-
-      if (!Hls.isSupported()) {
-        // Safari / native HLS
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = m3u8url;
-          video.addEventListener('loadedmetadata', () => {
-            hideOverlay();
-            setStatus(`✅ Playing ${channel} — direct from Twitch CDN`, 'ok');
-            loadBtn.disabled = false;
-            video.play().catch(() => { });
-          }, { once: true });
-          video.addEventListener('error', () => {
-            setStatus('❌ Playback error. The channel may be offline.', 'err');
-            showOverlay('Playback failed.');
-            loadBtn.disabled = false;
-          }, { once: true });
-        } else {
-          setStatus('❌ Your browser does not support HLS.', 'err');
-          showOverlay('HLS not supported in this browser.');
-          loadBtn.disabled = false;
-        }
-        return;
-      }
-
-      hls = new Hls({
-        /* Low-latency mode keeps you close to the live edge */
-        lowLatencyMode: true,
-        liveSyncDuration: 3,
-        liveMaxLatencyDuration: 10,
-        maxBufferLength: 20,
-        maxMaxBufferLength: 30,
-        enableWorker: true,
-      });
-
-      hls.loadSource(m3u8url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        hideOverlay();
-        setStatus(`✅ Playing ${channel} (ad-free) — direct Twitch CDN`, 'ok');
-        loadBtn.disabled = false;
-        video.play().catch(() => { });
-      });
-
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal) {
-          destroyHLS();
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            setStatus(`❌ Network error loading stream. ${channel} may be offline or geo-blocked.`, 'err');
-          } else {
-            setStatus(`❌ Playback error: ${data.details}`, 'err');
-          }
-          showOverlay('Playback failed — is the channel live?');
-          loadBtn.disabled = false;
-        }
-      });
-    }
-
-    /* ─────────────────────────────────────────────────────────
-       Parse best-quality stream URL from a master m3u8 text.
-       Returns the highest-bandwidth variant stream URL.
-     ────────────────────────────────────────────────────────── */
-    function parseBestStream(m3u8Text, baseUrl) {
-      const lines = m3u8Text.split('\n');
-      let bestBandwidth = -1;
-      let bestUrl = null;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.startsWith('#EXT-X-STREAM-INF')) {
-          const bwMatch = line.match(/BANDWIDTH=(\d+)/);
-          const bandwidth = bwMatch ? parseInt(bwMatch[1], 10) : 0;
-          const uri = lines[i + 1]?.trim();
-          if (uri && !uri.startsWith('#') && bandwidth > bestBandwidth) {
-            bestBandwidth = bandwidth;
-            bestUrl = uri.startsWith('http') ? uri : new URL(uri, baseUrl).href;
-          }
-        }
-      }
-      return bestUrl;
-    }
-
-    /* ─────────────────────────────────────────────────────────
-       Main — load a channel
-       1. Fetch GQL token
-       2. Fetch master m3u8 via CORS proxy chain (validates channel
-          is live and resolves the usher redirect to a direct CDN URL)
-       3. Parse best-quality variant and pass straight to HLS.js
-     ────────────────────────────────────────────────────────── */
-    async function loadChannel(ch) {
+    /* ── Load a channel ── */
+    function loadChannel(ch) {
       ch = ch.trim().toLowerCase();
       if (!ch) {
         setStatus('⚠️ Please enter a channel name.', 'err');
         return;
       }
 
-      loadBtn.disabled = true;
       channelInput.value = ch;
-      setStatus(`🔄 Fetching token for "${ch}"…`);
-      showOverlay(`Connecting to ${ch}…`);
+      setStatus(`🔄 Loading ${ch}…`);
 
-      /* Update chat immediately */
+      /* Set both iframes */
+      twitchEmbed.src = twitchEmbedURL(ch);
       chatIframe.src = chatisURL(ch);
 
-      try {
-        /* Step 1 — get sig + token from Twitch GQL */
-        const { token, sig } = await fetchToken(ch);
-        const masterUrl = usherURL(ch, token, sig);
-
-        setStatus(`🔄 Token received — fetching playlist…`);
-        showOverlay(`Loading ${ch}'s stream…`);
-
-        /* Step 2 — fetch master playlist via CORS proxy chain.
-           Only the playlist needs proxying; segments go direct. */
-        const masterRes = await fetchWithCORS(masterUrl);
-        const masterText = await masterRes.text();
-
-        /* Step 3 — parse highest-bandwidth variant URL */
-        const streamUrl = parseBestStream(masterText, masterUrl);
-        if (!streamUrl) {
-          throw new Error(`Could not find a playable stream. Is "${ch}" live?`);
-        }
-
-        setStatus(`🔄 Stream found — starting playback…`);
-        loadHLS(ch, streamUrl);
-      } catch (err) {
-        console.error('[VoidStream]', err);
-        setStatus(`❌ ${err.message}`, 'err');
-        showOverlay(err.message);
-        loadBtn.disabled = false;
-      }
+      /*
+       * The Twitch embed fires no reliable JS events cross-origin,
+       * so we optimistically mark as "playing" after a short delay.
+       * The user will see a "channel offline" message inside the
+       * embed itself if the channel is not live.
+       */
+      setTimeout(() => {
+        setStatus(`✅ Playing ${ch} (install TTV LOL PRO for ad-free)`, 'ok');
+      }, 3500);
     }
 
     /* ── Events ── */
