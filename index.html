@@ -429,7 +429,32 @@
     /* Build ChatIS URL for a channel */
     const chatisURL = (ch) => `https://chatis.is2511.com/v2/?channel=${ch}&size=1&font=11&shadow=1`;
 
-    /* Build Twitch usher URL from token data */
+    /* ─────────────────────────────────────────────────────────
+       CORS proxy list — used ONLY for the initial usher master
+       playlist fetch. Video segments load directly from Twitch
+       CDN which already has Access-Control-Allow-Origin: *.
+       Free public proxies — first working one wins.
+     ────────────────────────────────────────────────────────── */
+    const CORS_PROXIES = [
+      null,                                      // 1st: try direct (works if served from HTTPS)
+      'https://corsproxy.io/?url=',              // 2nd: corsproxy.io
+      'https://api.allorigins.win/raw?url=',     // 3rd: allorigins
+      'https://cors.eu.org/',                    // 4th: cors.eu.org
+      'https://thingproxy.freeboard.io/fetch/',  // 5th: thingproxy
+    ];
+
+    /** Fetch a URL trying each CORS proxy in order until one succeeds */
+    async function fetchWithCORS(url) {
+      for (const proxy of CORS_PROXIES) {
+        try {
+          const proxyUrl = proxy ? proxy + encodeURIComponent(url) : url;
+          const res = await fetch(proxyUrl);
+          if (res.ok) return res;
+        } catch (_) { /* try next */ }
+      }
+      throw new Error('Could not reach Twitch playlist (CORS issue). Try opening the page from a web server or GitHub Pages.');
+    }
+
     const usherURL = (channel, token, sig) => {
       const p = Math.floor(Math.random() * 1e7);
       const params = new URLSearchParams({
@@ -615,9 +640,9 @@
     /* ─────────────────────────────────────────────────────────
        Main — load a channel
        1. Fetch GQL token
-       2. Fetch master m3u8 ourselves (validates channel is live
-          and resolves the usher redirect to a direct CDN URL)
-       3. Pass best-quality stream URL directly to HLS.js
+       2. Fetch master m3u8 via CORS proxy chain (validates channel
+          is live and resolves the usher redirect to a direct CDN URL)
+       3. Parse best-quality variant and pass straight to HLS.js
      ────────────────────────────────────────────────────────── */
     async function loadChannel(ch) {
       ch = ch.trim().toLowerCase();
@@ -635,30 +660,25 @@
       chatIframe.src = chatisURL(ch);
 
       try {
-        /* Step 1 — get sig + token */
+        /* Step 1 — get sig + token from Twitch GQL */
         const { token, sig } = await fetchToken(ch);
         const masterUrl = usherURL(ch, token, sig);
 
         setStatus(`🔄 Token received — fetching playlist…`);
         showOverlay(`Loading ${ch}'s stream…`);
 
-        /* Step 2 — fetch the master playlist ourselves so we can
-           validate the channel is live and get a direct CDN URL */
-        const masterRes = await fetch(masterUrl);
-        if (!masterRes.ok) {
-          throw new Error(
-            `"${ch}" returned HTTP ${masterRes.status} — the channel may be offline or access-restricted.`
-          );
-        }
+        /* Step 2 — fetch master playlist via CORS proxy chain.
+           Only the playlist needs proxying; segments go direct. */
+        const masterRes = await fetchWithCORS(masterUrl);
         const masterText = await masterRes.text();
 
-        /* Step 3 — parse the best quality variant URL */
+        /* Step 3 — parse highest-bandwidth variant URL */
         const streamUrl = parseBestStream(masterText, masterUrl);
         if (!streamUrl) {
-          throw new Error(`Could not parse a playable stream from the playlist. Is "${ch}" live?`);
+          throw new Error(`Could not find a playable stream. Is "${ch}" live?`);
         }
 
-        setStatus(`🔄 Stream URL resolved — starting playback…`);
+        setStatus(`🔄 Stream found — starting playback…`);
         loadHLS(ch, streamUrl);
       } catch (err) {
         console.error('[VoidStream]', err);
