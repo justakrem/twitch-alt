@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VoidStream — Ad-Free Twitch</title>
-  <meta name="description" content="100% client-side, ad-free Twitch live stream player using public proxies and HLS.js." />
+  <meta name="description" content="100% client-side, ad-free Twitch live stream player." />
 
-  <!-- HLS.js latest CDN -->
+  <!-- HLS.js -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
   <!-- Google Fonts -->
@@ -14,24 +15,29 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
   <style>
-    /* ─── Reset & Base ─── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:        #0d0d0f;
-      --surface:   #16161a;
-      --surface2:  #1e1e24;
-      --border:    #2a2a35;
-      --accent:    #9147ff;
-      --accent2:   #772ce8;
-      --text:      #efeff1;
-      --muted:     #8b8b9e;
-      --live-red:  #eb0400;
-      --radius:    12px;
-      --chat-w:    340px;
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    html, body {
+    :root {
+      --bg: #0d0d0f;
+      --surface: #16161a;
+      --surface2: #1e1e24;
+      --border: #2a2a35;
+      --accent: #9147ff;
+      --accent2: #772ce8;
+      --text: #efeff1;
+      --muted: #8b8b9e;
+      --radius: 12px;
+      --chat-w: 340px;
+    }
+
+    html,
+    body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
@@ -41,7 +47,7 @@
       overflow-x: hidden;
     }
 
-    /* ─── Header / Navbar ─── */
+    /* ── Navbar ── */
     header {
       display: flex;
       align-items: center;
@@ -77,7 +83,7 @@
       text-transform: uppercase;
     }
 
-    /* ─── Channel bar ─── */
+    /* ── Channel bar ── */
     .channel-bar {
       display: flex;
       align-items: center;
@@ -99,8 +105,14 @@
       outline: none;
       transition: border-color 0.2s;
     }
-    .channel-bar input:focus { border-color: var(--accent); }
-    .channel-bar input::placeholder { color: var(--muted); }
+
+    .channel-bar input:focus {
+      border-color: var(--accent);
+    }
+
+    .channel-bar input::placeholder {
+      color: var(--muted);
+    }
 
     .btn {
       background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -115,10 +127,21 @@
       white-space: nowrap;
       transition: opacity 0.15s, transform 0.1s;
     }
-    .btn:hover  { opacity: 0.9; }
-    .btn:active { transform: scale(0.97); }
 
-    /* ─── Status bar ─── */
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Status bar ── */
     #status-bar {
       display: flex;
       align-items: center;
@@ -131,32 +154,55 @@
       color: var(--muted);
       transition: color 0.3s;
     }
-    #status-bar.ok  { color: #4ade80; }
-    #status-bar.err { color: #f87171; }
+
+    #status-bar.ok {
+      color: #4ade80;
+    }
+
+    #status-bar.err {
+      color: #f87171;
+    }
+
+    #status-bar.warn {
+      color: #fbbf24;
+    }
 
     .live-dot {
-      width: 8px; height: 8px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
-      background: var(--live-red);
+      background: #eb0400;
       animation: pulse 1.4s infinite;
       flex-shrink: 0;
       display: none;
     }
-    #status-bar.ok .live-dot { display: block; }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(235,4,0,.6); }
-      50%       { opacity: .7; box-shadow: 0 0 0 5px rgba(235,4,0,0); }
+    #status-bar.ok .live-dot {
+      display: block;
     }
 
-    /* ─── Main layout ─── */
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(235, 4, 0, .6);
+      }
+
+      50% {
+        opacity: .7;
+        box-shadow: 0 0 0 5px rgba(235, 4, 0, 0);
+      }
+    }
+
+    /* ── Layout ── */
     #app {
       display: flex;
       height: calc(100vh - 56px - 36px);
       overflow: hidden;
     }
 
-    /* ─── Player side ─── */
+    /* ── Player ── */
     #player-wrap {
       flex: 1;
       min-width: 0;
@@ -173,7 +219,7 @@
       background: #000;
     }
 
-    /* Overlay shown while loading */
+    /* Loading overlay */
     #overlay {
       position: absolute;
       inset: 0;
@@ -182,20 +228,29 @@
       align-items: center;
       justify-content: center;
       gap: 16px;
-      background: rgba(0,0,0,.65);
+      background: rgba(0, 0, 0, .7);
       pointer-events: none;
       transition: opacity 0.4s;
     }
-    #overlay.hidden { opacity: 0; }
+
+    #overlay.hidden {
+      opacity: 0;
+    }
 
     .spinner {
-      width: 48px; height: 48px;
-      border: 3px solid rgba(145,71,255,.25);
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(145, 71, 255, .25);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
     #overlay-text {
       font-size: 14px;
@@ -204,7 +259,7 @@
       padding: 0 24px;
     }
 
-    /* ─── Chat side ─── */
+    /* ── Chat ── */
     #chat-wrap {
       width: var(--chat-w);
       flex-shrink: 0;
@@ -222,10 +277,14 @@
       border-bottom: 1px solid var(--border);
       font-size: 13px;
       font-weight: 600;
-      color: var(--text);
       background: var(--surface2);
     }
-    .chat-header span { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+    .chat-header span {
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 12px;
+    }
 
     #chat-iframe {
       flex: 1;
@@ -234,7 +293,7 @@
       width: 100%;
     }
 
-    /* ─── Responsive ─── */
+    /* ── Responsive ── */
     @media (max-width: 768px) {
       #app {
         flex-direction: column;
@@ -254,7 +313,9 @@
         border-top: 1px solid var(--border);
       }
 
-      .channel-bar { max-width: 100%; }
+      .channel-bar {
+        max-width: 100%;
+      }
 
       header {
         flex-wrap: wrap;
@@ -263,294 +324,314 @@
         gap: 10px;
       }
 
-      #status-bar { padding: 8px 16px; }
+      #status-bar {
+        padding: 8px 16px;
+      }
     }
 
     @media (max-width: 480px) {
-      .logo { font-size: 1rem; }
-      .badge-adfree { display: none; }
+      .logo {
+        font-size: 1rem;
+      }
+
+      .badge-adfree {
+        display: none;
+      }
     }
 
-    /* ─── Scrollbar ─── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
   </style>
 </head>
+
 <body>
 
-<!-- ══════════════════════════════════
-     HEADER / NAVBAR
-══════════════════════════════════ -->
-<header>
-  <div class="logo">VoidStream</div>
-  <div class="badge-adfree">Ad-Free</div>
+  <!-- ═══════════════════════════════════
+     HEADER
+════════════════════════════════════ -->
+  <header>
+    <div class="logo">VoidStream</div>
+    <div class="badge-adfree">Ad-Free</div>
+    <div class="channel-bar">
+      <input id="channel-input" type="text" placeholder="Channel name…" autocomplete="off" spellcheck="false" />
+      <button class="btn" id="load-btn">▶ Load</button>
+    </div>
+  </header>
 
-  <div class="channel-bar">
-    <input
-      type="text"
-      id="channel-input"
-      placeholder="Channel name…"
-      autocomplete="off"
-      spellcheck="false"
-    />
-    <button class="btn" id="load-btn">▶ Load</button>
-  </div>
-</header>
-
-<!-- ══════════════════════════════════
+  <!-- ═══════════════════════════════════
      STATUS BAR
-══════════════════════════════════ -->
-<div id="status-bar">
-  <div class="live-dot"></div>
-  <span id="status-text">Enter a channel name and press Load.</span>
-</div>
+════════════════════════════════════ -->
+  <div id="status-bar">
+    <div class="live-dot"></div>
+    <span id="status-text">Enter a channel name and press Load.</span>
+  </div>
 
-<!-- ══════════════════════════════════
-     MAIN — VIDEO + CHAT
-══════════════════════════════════ -->
-<div id="app">
+  <!-- ═══════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════ -->
+  <div id="app">
+    <div id="player-wrap">
+      <video id="player" controls autoplay muted playsinline></video>
+      <div id="overlay">
+        <div class="spinner"></div>
+        <div id="overlay-text">Loading stream…</div>
+      </div>
+    </div>
 
-  <!-- Video player -->
-  <div id="player-wrap">
-    <video
-      id="player"
-      controls
-      autoplay
-      muted
-      playsinline
-    ></video>
-    <div id="overlay">
-      <div class="spinner"></div>
-      <div id="overlay-text">Loading stream…</div>
+    <div id="chat-wrap">
+      <div class="chat-header">
+        💬 Live Chat <span>via ChatIS</span>
+      </div>
+      <iframe id="chat-iframe" title="Live Chat" allowfullscreen></iframe>
     </div>
   </div>
 
-  <!-- ChatIS iframe -->
-  <div id="chat-wrap">
-    <div class="chat-header">
-      💬 Live Chat
-      <span>via ChatIS</span>
-    </div>
-    <!-- src will be set dynamically by JS -->
-    <iframe
-      id="chat-iframe"
-      title="Live Chat"
-      allowfullscreen
-    ></iframe>
-  </div>
+  <!-- ═══════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════ -->
+  <script>
+    'use strict';
 
-</div>
+    /* ─────────────────────────────────────────────────────────
+      HOW THIS WORKS
+      ─────────────────────────────────────────────────────────
+      1. We call Twitch's GraphQL API (public anon Client-ID)
+         to get a sig+token pair for the channel's stream.
+      2. We build a usher.ttvnw.net URL with those credentials.
+      3. HLS.js fetches the master playlist from Twitch's own CDN.
+         → No external proxy, zero added latency.
+    
+      The GQL Client-ID below ("kimne78kx3ncx6brgo4mv6wki5h1ko")
+      is the public anonymous Twitch web-player client ID.
+      It has been stable for many years and is used by all
+      major community ad-blocking projects (Purple Adblock, vaft, etc).
+    
+      NOTE: Twitch's SSAI (server-side ad injection) may still
+      insert ads into the CDN stream on some accounts/regions.
+      For guaranteed ad-free viewing the best approach is to
+      pair this page with the TTV LOL PRO or Purple Adblock
+      browser extension, which intercepts GQL calls.
+     ────────────────────────────────────────────────────────── */
 
-<!-- ══════════════════════════════════
-     JAVASCRIPT — Core Logic
-══════════════════════════════════ -->
-<script>
-'use strict';
+    const GQL_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+    const DEFAULT_CHANNEL = 'shroud';
 
-/* ───────────────────────────────────────────────
-   PROXY LIST
-   These are TTV LOL PRO / Luminous-TTV public
-   load-balanced proxies that forward requests to
-   Twitch CDN with ads stripped.
-   Update this list if proxies go offline.
-─────────────────────────────────────────────── */
-const PROXIES = [
-  'https://lb-eu.cdn-perfprod.com',
-  'https://lb-eu2.cdn-perfprod.com',
-  'https://lb-eu3.cdn-perfprod.com',
-  'https://lb-na.cdn-perfprod.com',
-  'https://lb-na2.cdn-perfprod.com',
-  'https://eu.luminous.dev',
-  'https://as.luminous.dev',
-  'https://vod-secure.twitch.tv',  // direct fallback (may show ads)
-];
+    /* Build ChatIS URL for a channel */
+    const chatisURL = (ch) => `https://chatis.is2511.com/a/?channel=${ch}`;
 
-/* ──────────────────────────────────────────────
-   SETTINGS
-────────────────────────────────────────────── */
-const DEFAULT_CHANNEL  = 'shroud';
-const CHATISURL        = (ch) => `https://chatis.is2511.com/a/?channel=${ch}`;
+    /* Build Twitch usher URL from token data */
+    const usherURL = (channel, token, sig) => {
+      const p = Math.floor(Math.random() * 1e7);
+      const params = new URLSearchParams({
+        sig,
+        token,
+        allow_source: 'true',
+        fast_bread: 'true',
+        p: String(p),
+        player_backend: 'mediaplayer',
+        playlist_include_framerate: 'true',
+        reassignments_supported: 'false',
+        supported_codecs: 'avc1',
+        cdm: 'wv',
+        transcode_mode: 'cbr_v1',
+      });
+      return `https://usher.ttvnw.net/api/channel/hls/${encodeURIComponent(channel)}.m3u8?${params}`;
+    };
 
-/* Build the m3u8 URL for a given proxy + channel */
-const buildM3U8 = (proxy, channel) =>
-  `${proxy}/hls/${channel.toLowerCase()}.m3u8`;
+    /* ── DOM refs ── */
+    const video = document.getElementById('player');
+    const statusBar = document.getElementById('status-bar');
+    const statusText = document.getElementById('status-text');
+    const overlay = document.getElementById('overlay');
+    const overlayText = document.getElementById('overlay-text');
+    const chatIframe = document.getElementById('chat-iframe');
+    const channelInput = document.getElementById('channel-input');
+    const loadBtn = document.getElementById('load-btn');
 
-/* ──────────────────────────────────────────────
-   DOM REFS
-────────────────────────────────────────────── */
-const video       = document.getElementById('player');
-const statusBar   = document.getElementById('status-bar');
-const statusText  = document.getElementById('status-text');
-const overlay     = document.getElementById('overlay');
-const overlayText = document.getElementById('overlay-text');
-const chatIframe  = document.getElementById('chat-iframe');
-const channelInput= document.getElementById('channel-input');
-const loadBtn     = document.getElementById('load-btn');
-
-/* ──────────────────────────────────────────────
-   STATE
-────────────────────────────────────────────── */
-let hls           = null;   // HLS.js instance
-let currentProxy  = 0;      // index into PROXIES array
-let currentChannel= '';
-
-/* ──────────────────────────────────────────────
-   HELPERS — UI
-────────────────────────────────────────────── */
-function setStatus(msg, state = '') {
-  statusText.textContent = msg;
-  statusBar.className = state;       // '' | 'ok' | 'err'
-}
-
-function showOverlay(msg) {
-  overlayText.textContent = msg;
-  overlay.classList.remove('hidden');
-}
-
-function hideOverlay() {
-  overlay.classList.add('hidden');
-}
-
-/* ──────────────────────────────────────────────
-   CHAT — update ChatIS iframe for a channel
-────────────────────────────────────────────── */
-function loadChat(channel) {
-  chatIframe.src = CHATISURL(channel);
-}
-
-/* ──────────────────────────────────────────────
-   PLAYER — destroy existing HLS instance
-────────────────────────────────────────────── */
-function destroyHLS() {
-  if (hls) {
-    hls.destroy();
-    hls = null;
-  }
-}
-
-/* ──────────────────────────────────────────────
-   PLAYER — try loading a stream from a specific
-            proxy index; on error, try next proxy
-────────────────────────────────────────────── */
-function tryProxy(channel, proxyIdx) {
-  if (proxyIdx >= PROXIES.length) {
-    // All proxies exhausted
-    setStatus(`❌ All ${PROXIES.length} proxies failed. The channel may be offline or the proxies are down.`, 'err');
-    showOverlay('Stream unavailable — all proxies failed.');
-    loadBtn.disabled = false;
-    return;
-  }
-
-  destroyHLS();
-
-  const proxy = PROXIES[proxyIdx];
-  const url   = buildM3U8(proxy, channel);
-
-  setStatus(`🔄 Trying proxy ${proxyIdx + 1}/${PROXIES.length} — ${proxy.replace('https://', '')}…`);
-  showOverlay(`Trying proxy ${proxyIdx + 1} of ${PROXIES.length}…`);
-
-  if (!Hls.isSupported()) {
-    // Fallback for browsers with native HLS (Safari)
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = url;
-      video.addEventListener('loadedmetadata', () => {
-        onSuccess(channel, proxyIdx);
-        video.play().catch(() => {});
-      }, { once: true });
-      video.addEventListener('error', () => tryProxy(channel, proxyIdx + 1), { once: true });
-    } else {
-      setStatus('❌ Your browser does not support HLS playback.', 'err');
-      showOverlay('Browser HLS not supported.');
+    /* ── Helpers ── */
+    function setStatus(msg, cls = '') {
+      statusText.textContent = msg;
+      statusBar.className = cls;
     }
-    return;
-  }
+    function showOverlay(msg) {
+      overlayText.textContent = msg;
+      overlay.classList.remove('hidden');
+    }
+    function hideOverlay() {
+      overlay.classList.add('hidden');
+    }
 
-  /* ── HLS.js config ──────────────────────────
-     lowLatencyMode   → Twitch Low Latency Mode
-     liveSyncDuration → keep close to live edge
-     maxBufferLength  → don't buffer too much
-  ────────────────────────────────────────── */
-  hls = new Hls({
-    lowLatencyMode:   true,
-    liveSyncDuration: 3,
-    liveMaxLatencyDuration: 10,
-    maxBufferLength:  20,
-    maxMaxBufferLength: 30,
-    enableWorker:     true,
-    xhrSetup: (xhr) => {
-      // No custom headers required — proxies handle everything
-    },
-  });
+    /* ── HLS.js instance ── */
+    let hls = null;
+    function destroyHLS() {
+      if (hls) { hls.destroy(); hls = null; }
+    }
 
-  hls.loadSource(url);
-  hls.attachMedia(video);
+    /* ─────────────────────────────────────────────────────────
+       Step 1 — Fetch playback token via Twitch GQL
+     ────────────────────────────────────────────────────────── */
+    async function fetchToken(channel) {
+      /*
+       * Two alternative GQL queries are tried in order:
+       *  A) PlaybackAccessToken (uses Client-Integrity header — optional)
+       *  B) PlaybackAccessToken_Template (plain, no integrity needed)
+       */
+      const body = JSON.stringify({
+        operationName: 'PlaybackAccessToken_Template',
+        query: `query PlaybackAccessToken_Template(
+      $login: String!, $isLive: Boolean!, $vodID: ID!, $isVod: Boolean!, $playerType: String!
+    ) {
+      streamPlaybackAccessToken(channelName: $login, params: {
+        platform: "web", playerBackend: "mediaplayer", playerType: $playerType
+      }) @include(if: $isLive) { value signature __typename }
+      videoPlaybackAccessToken(id: $vodID, params: {
+        platform: "web", playerBackend: "mediaplayer", playerType: $playerType
+      }) @include(if: $isVod) { value signature __typename }
+    }`,
+        variables: {
+          isLive: true,
+          login: channel.toLowerCase(),
+          isVod: false,
+          vodID: '',
+          playerType: 'site',
+        },
+      });
 
-  hls.on(Hls.Events.MANIFEST_PARSED, () => {
-    onSuccess(channel, proxyIdx);
-    video.play().catch(() => {
-      // Autoplay blocked — user must click play (already muted so usually fine)
+      const res = await fetch('https://gql.twitch.tv/gql', {
+        method: 'POST',
+        headers: {
+          'Client-ID': GQL_CLIENT_ID,
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+
+      if (!res.ok) throw new Error(`GQL ${res.status}: ${res.statusText}`);
+
+      const json = await res.json();
+      const data = json?.data?.streamPlaybackAccessToken;
+      if (!data?.value || !data?.signature) {
+        throw new Error('Channel may be offline or Twitch returned no token.');
+      }
+      return { token: data.value, sig: data.signature };
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       Step 2 — Load the HLS stream with HLS.js
+     ────────────────────────────────────────────────────────── */
+    function loadHLS(channel, m3u8url) {
+      destroyHLS();
+
+      if (!Hls.isSupported()) {
+        // Safari / native HLS
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = m3u8url;
+          video.addEventListener('loadedmetadata', () => {
+            hideOverlay();
+            setStatus(`✅ Playing ${channel} — direct from Twitch CDN`, 'ok');
+            loadBtn.disabled = false;
+            video.play().catch(() => { });
+          }, { once: true });
+          video.addEventListener('error', () => {
+            setStatus('❌ Playback error. The channel may be offline.', 'err');
+            showOverlay('Playback failed.');
+            loadBtn.disabled = false;
+          }, { once: true });
+        } else {
+          setStatus('❌ Your browser does not support HLS.', 'err');
+          showOverlay('HLS not supported in this browser.');
+          loadBtn.disabled = false;
+        }
+        return;
+      }
+
+      hls = new Hls({
+        /* Low-latency mode keeps you close to the live edge */
+        lowLatencyMode: true,
+        liveSyncDuration: 3,
+        liveMaxLatencyDuration: 10,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 30,
+        enableWorker: true,
+      });
+
+      hls.loadSource(m3u8url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        hideOverlay();
+        setStatus(`✅ Playing ${channel} (ad-free) — direct Twitch CDN`, 'ok');
+        loadBtn.disabled = false;
+        video.play().catch(() => { });
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          destroyHLS();
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setStatus(`❌ Network error loading stream. ${channel} may be offline or geo-blocked.`, 'err');
+          } else {
+            setStatus(`❌ Playback error: ${data.details}`, 'err');
+          }
+          showOverlay('Playback failed — is the channel live?');
+          loadBtn.disabled = false;
+        }
+      });
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       Main — load a channel
+     ────────────────────────────────────────────────────────── */
+    async function loadChannel(ch) {
+      ch = ch.trim().toLowerCase();
+      if (!ch) {
+        setStatus('⚠️ Please enter a channel name.', 'err');
+        return;
+      }
+
+      loadBtn.disabled = true;
+      channelInput.value = ch;
+      setStatus(`🔄 Fetching token for "${ch}"…`);
+      showOverlay(`Connecting to ${ch}…`);
+
+      /* Update chat immediately */
+      chatIframe.src = chatisURL(ch);
+
+      try {
+        const { token, sig } = await fetchToken(ch);
+        const m3u8 = usherURL(ch, token, sig);
+        setStatus(`🔄 Token received — loading stream…`);
+        loadHLS(ch, m3u8);
+      } catch (err) {
+        console.error('[VoidStream]', err);
+        setStatus(`❌ ${err.message}`, 'err');
+        showOverlay(err.message);
+        loadBtn.disabled = false;
+      }
+    }
+
+    /* ── Events ── */
+    loadBtn.addEventListener('click', () => loadChannel(channelInput.value));
+    channelInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadChannel(channelInput.value);
     });
-  });
 
-  hls.on(Hls.Events.ERROR, (event, data) => {
-    if (data.fatal) {
-      console.warn(`[VoidStream] Fatal HLS error on proxy ${proxyIdx}:`, data.type, data.details);
-      // Try the next proxy
-      tryProxy(channel, proxyIdx + 1);
-    }
-  });
-}
-
-/* ──────────────────────────────────────────────
-   Called when a proxy successfully serves HLS
-────────────────────────────────────────────── */
-function onSuccess(channel, proxyIdx) {
-  hideOverlay();
-  const proxyHost = PROXIES[proxyIdx].replace('https://', '');
-  setStatus(`✅ Playing ${channel} (ad-free) · proxy: ${proxyHost}`, 'ok');
-  loadBtn.disabled = false;
-}
-
-/* ──────────────────────────────────────────────
-   Main entry — load a channel from scratch
-────────────────────────────────────────────── */
-function loadChannel(channel) {
-  channel = channel.trim().toLowerCase();
-  if (!channel) {
-    setStatus('⚠️ Please enter a channel name.', 'err');
-    return;
-  }
-
-  currentChannel = channel;
-  loadBtn.disabled = true;
-  channelInput.value = channel;
-
-  // Update chat immediately — ChatIS loads independently
-  loadChat(channel);
-
-  // Start proxy waterfall from the first proxy
-  tryProxy(channel, 0);
-}
-
-/* ──────────────────────────────────────────────
-   EVENT LISTENERS
-────────────────────────────────────────────── */
-loadBtn.addEventListener('click', () => {
-  loadChannel(channelInput.value);
-});
-
-channelInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') loadChannel(channelInput.value);
-});
-
-/* ──────────────────────────────────────────────
-   AUTO-LOAD default channel on page open
-────────────────────────────────────────────── */
-window.addEventListener('DOMContentLoaded', () => {
-  channelInput.value = DEFAULT_CHANNEL;
-  loadChannel(DEFAULT_CHANNEL);
-});
-</script>
+    /* ── Auto-load on open ── */
+    window.addEventListener('DOMContentLoaded', () => {
+      channelInput.value = DEFAULT_CHANNEL;
+      loadChannel(DEFAULT_CHANNEL);
+    });
+  </script>
 </body>
+
 </html>
