@@ -427,7 +427,7 @@
     const DEFAULT_CHANNEL = 'shroud';
 
     /* Build ChatIS URL for a channel */
-    const chatisURL = (ch) => `https://chatis.is2511.com/a/?channel=${ch}`;
+    const chatisURL = (ch) => `https://chatis.is2511.com/v2/?channel=${ch}&size=1&font=11&shadow=1`;
 
     /* Build Twitch usher URL from token data */
     const usherURL = (channel, token, sig) => {
@@ -590,7 +590,34 @@
     }
 
     /* ─────────────────────────────────────────────────────────
+       Parse best-quality stream URL from a master m3u8 text.
+       Returns the highest-bandwidth variant stream URL.
+     ────────────────────────────────────────────────────────── */
+    function parseBestStream(m3u8Text, baseUrl) {
+      const lines = m3u8Text.split('\n');
+      let bestBandwidth = -1;
+      let bestUrl = null;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('#EXT-X-STREAM-INF')) {
+          const bwMatch = line.match(/BANDWIDTH=(\d+)/);
+          const bandwidth = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+          const uri = lines[i + 1]?.trim();
+          if (uri && !uri.startsWith('#') && bandwidth > bestBandwidth) {
+            bestBandwidth = bandwidth;
+            bestUrl = uri.startsWith('http') ? uri : new URL(uri, baseUrl).href;
+          }
+        }
+      }
+      return bestUrl;
+    }
+
+    /* ─────────────────────────────────────────────────────────
        Main — load a channel
+       1. Fetch GQL token
+       2. Fetch master m3u8 ourselves (validates channel is live
+          and resolves the usher redirect to a direct CDN URL)
+       3. Pass best-quality stream URL directly to HLS.js
      ────────────────────────────────────────────────────────── */
     async function loadChannel(ch) {
       ch = ch.trim().toLowerCase();
@@ -608,10 +635,31 @@
       chatIframe.src = chatisURL(ch);
 
       try {
+        /* Step 1 — get sig + token */
         const { token, sig } = await fetchToken(ch);
-        const m3u8 = usherURL(ch, token, sig);
-        setStatus(`🔄 Token received — loading stream…`);
-        loadHLS(ch, m3u8);
+        const masterUrl = usherURL(ch, token, sig);
+
+        setStatus(`🔄 Token received — fetching playlist…`);
+        showOverlay(`Loading ${ch}'s stream…`);
+
+        /* Step 2 — fetch the master playlist ourselves so we can
+           validate the channel is live and get a direct CDN URL */
+        const masterRes = await fetch(masterUrl);
+        if (!masterRes.ok) {
+          throw new Error(
+            `"${ch}" returned HTTP ${masterRes.status} — the channel may be offline or access-restricted.`
+          );
+        }
+        const masterText = await masterRes.text();
+
+        /* Step 3 — parse the best quality variant URL */
+        const streamUrl = parseBestStream(masterText, masterUrl);
+        if (!streamUrl) {
+          throw new Error(`Could not parse a playable stream from the playlist. Is "${ch}" live?`);
+        }
+
+        setStatus(`🔄 Stream URL resolved — starting playback…`);
+        loadHLS(ch, streamUrl);
       } catch (err) {
         console.error('[VoidStream]', err);
         setStatus(`❌ ${err.message}`, 'err');
